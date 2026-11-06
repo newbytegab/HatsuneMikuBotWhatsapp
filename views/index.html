@@ -1,0 +1,262 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MikuBot — Painel</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #101820;
+      --panel: #192630;
+      --mint: #39e6c1;
+      --text: #eefafa;
+      --muted: #a7bac3;
+      --border: #30434d;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: radial-gradient(ellipse at top, #19383e, var(--bg) 65%);
+      color: var(--text);
+      font-family: "Segoe UI", sans-serif;
+      min-height: 100vh;
+    }
+
+    main {
+      width: min(900px, 92%);
+      margin: 0 auto;
+      padding: 38px 0;
+    }
+
+    header { margin-bottom: 26px; }
+
+    .eyebrow {
+      color: var(--mint);
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    h1 { margin: 8px 0; font-size: clamp(30px, 6vw, 46px); }
+    p { color: var(--muted); line-height: 1.6; }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 24px;
+      margin: 18px 0;
+      box-shadow: 0 12px 35px #0002;
+    }
+
+    h2 { margin-top: 0; font-size: 19px; }
+
+    label {
+      display: block;
+      margin: 18px 0 8px;
+      font-size: 14px;
+      color: #d9eeee;
+    }
+
+    input, textarea, select {
+      width: 100%;
+      background: #101a22;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      font: inherit;
+    }
+
+    textarea { min-height: 130px; resize: vertical; }
+
+    .check {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .check input { width: auto; }
+
+    button {
+      margin-top: 18px;
+      background: var(--mint);
+      color: #08221e;
+      border: 0;
+      border-radius: 10px;
+      padding: 12px 18px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button:disabled { opacity: .6; cursor: wait; }
+    button:hover { filter: brightness(1.08); }
+
+    #notice {
+      padding: 12px;
+      margin-top: 14px;
+      border-radius: 10px;
+      background: #102f30;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .hidden { display: none; }
+
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+      padding: 16px;
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">Virtual assistant · WhatsApp</div>
+    <h1>Hatsune Miku <span style="color:#39e6c1">♪</span></h1>
+    <p>Seu cantinho para configurar a personalidade e conectar sua assistente.</p>
+  </header>
+
+  <section class="card">
+    <h2>Conexão com o WhatsApp</h2>
+    <p id="connection">Verificando estado do bot...</p>
+
+    <label for="phone">Número do WhatsApp com código do país</label>
+    <input id="phone" type="tel" placeholder="Ex.: 5511999999999" autocomplete="tel">
+    <button id="pair">Gerar código de pareamento</button>
+    <p id="pairResult" class="hidden"></p>
+  </section>
+
+  <section class="card">
+    <h2>Personalidade da Miku</h2>
+
+    <label for="prompt">Prompt de personalidade</label>
+    <textarea id="prompt" placeholder="Descreva como a Miku deve conversar..."></textarea>
+
+    <label for="aiModel">Modelo de IA</label>
+    <input id="aiModel" value="meta-llama/llama-4-scout-17b-16e-instruct">
+
+    <label for="whisperModel">Modelo de transcrição de áudio</label>
+    <input id="whisperModel" value="whisper-large-v3-turbo">
+
+    <label class="check">
+      <input id="sttEnabled" type="checkbox">
+      Ativar transcrição de mensagens de voz
+    </label>
+
+    <button id="save">Salvar configurações</button>
+  </section>
+
+  <div id="notice" role="status" aria-live="polite">Painel carregado.</div>
+  <footer>MikuBot · Feito com carinho 💙</footer>
+</main>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const notice = (message) => {
+    $("notice").textContent = message;
+  };
+
+  async function api(path, options = {}) {
+    const response = await fetch(path, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers || {})
+      }
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(data.error || `Erro HTTP ${response.status}`);
+    }
+
+    return data;
+  }
+
+  async function loadStatus() {
+    try {
+      const data = await api("/status");
+
+      $("connection").textContent = data.connected
+        ? "O WhatsApp está conectado."
+        : "O WhatsApp ainda não está conectado.";
+
+      $("prompt").value = data.prompt || "";
+      $("phone").value = data.phone || "";
+      $("aiModel").value = data.aiModel ||
+        "meta-llama/llama-4-scout-17b-16e-instruct";
+      $("whisperModel").value = data.whisperModel ||
+        "whisper-large-v3-turbo";
+      $("sttEnabled").checked = !!data.sttEnabled;
+
+      if (data.pairingCode) {
+        $("pairResult").textContent =
+          "Código atual: " + data.pairingCode;
+        $("pairResult").classList.remove("hidden");
+      }
+    } catch (error) {
+      $("connection").textContent = "Não foi possível consultar o estado.";
+      notice("Erro ao carregar configurações: " + error.message);
+    }
+  }
+
+  $("pair").addEventListener("click", async () => {
+    const phone = $("phone").value.trim();
+    if (!phone) {
+      notice("Digite o número do WhatsApp com código do país.");
+      return;
+    }
+
+    $("pair").disabled = true;
+    try {
+      const data = await api("/get-code", {
+        method: "POST",
+        body: JSON.stringify({ phone })
+      });
+
+      $("pairResult").textContent = data.code
+        ? "Seu código de pareamento: " + data.code
+        : "Código recebido, mas não foi informado.";
+      $("pairResult").classList.remove("hidden");
+      notice("Resposta recebida do bot.");
+    } catch (error) {
+      notice("Não foi possível gerar o código: " + error.message);
+    } finally {
+      $("pair").disabled = false;
+    }
+  });
+
+  $("save").addEventListener("click", async () => {
+    $("save").disabled = true;
+    try {
+      await api("/save", {
+        method: "POST",
+        body: JSON.stringify({
+          prompt: $("prompt").value,
+          aiModel: $("aiModel").value.trim(),
+          whisperModel: $("whisperModel").value.trim(),
+          sttEnabled: $("sttEnabled").checked
+        })
+      });
+      notice("Configurações salvas!");
+    } catch (error) {
+      notice("Erro ao salvar: " + error.message);
+    } finally {
+      $("save").disabled = false;
+    }
+  });
+
+  loadStatus();
+</script>
+</body>
+</html>
